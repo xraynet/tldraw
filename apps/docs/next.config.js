@@ -5,6 +5,7 @@ const REWRITE_DOMAIN = 'tldrawdotdev.framer.website'
 
 const nextConfig = {
 	reactStrictMode: true,
+	assetPrefix: process.env.ASSET_PREFIX || undefined,
 	experimental: {
 		scrollRestoration: true,
 	},
@@ -185,6 +186,11 @@ const nextConfig = {
 				source: '/starter-kits',
 				destination: '/starter-kits/overview',
 				permanent: true,
+			},
+			{
+				source: '/discord',
+				destination: 'https://discord.com/invite/s4FXZ6fppJ',
+				permanent: false,
 			},
 		]
 	},
