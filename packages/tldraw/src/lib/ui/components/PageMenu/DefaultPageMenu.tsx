@@ -511,6 +511,7 @@ export const DefaultPageMenu = memo(function DefaultPageMenu() {
 
 	const changePage = useCallback(
 		(id: TLPageId) => {
+			editor.markHistoryStoppingPoint('change-page')
 			editor.setCurrentPage(id)
 			trackEvent('change-page', { source: 'page-menu' })
 		},

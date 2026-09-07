@@ -1611,6 +1611,7 @@ export function ActionsProvider({ overrides, children }: ActionsProviderProps) {
 					const currentPageIndex = pages.findIndex((page) => page.id === editor.getCurrentPageId())
 					if (currentPageIndex < 1) return
 					trackEvent('change-page', { source, direction: 'prev' })
+					editor.markHistoryStoppingPoint('change-page')
 					editor.setCurrentPage(pages[currentPageIndex - 1].id)
 				},
 			},
@@ -1643,6 +1644,7 @@ export function ActionsProvider({ overrides, children }: ActionsProviderProps) {
 						return
 					}
 
+					editor.markHistoryStoppingPoint('change-page')
 					editor.setCurrentPage(pages[currentPageIndex + 1].id)
 					trackEvent('change-page', { source, direction: 'next' })
 				},
