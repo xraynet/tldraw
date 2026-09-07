@@ -44,7 +44,6 @@ import {
 	Atom,
 	Signal,
 	TLDocument,
-	TLSessionStateSnapshot,
 	TLUiToastsContextType,
 	TLUserPreferences,
 	assertExists,
@@ -521,6 +520,8 @@ export class TldrawApp {
 		return assertExists(this.user$.get(), 'no user')
 	}
 
+	// Keep these helpers even when no per-user flags are active; future rollouts need
+	// reactive access to the flags stored on the user record.
 	@computed({ isEqual })
 	getUserFlags(): Set<TlaFlags> {
 		const user = this.getUser()
@@ -608,11 +609,6 @@ export class TldrawApp {
 		return pinned
 			.map((f) => ({ fileId: f.fileId, isPinned: f.index !== null, date: f.file.updatedAt }))
 			.concat(nextOrdering.map((f) => ({ fileId: f.fileId, isPinned: false, date: f.date })))
-	}
-
-	// Clear workspace file ordering to refresh on expand (like recent files on page reload)
-	clearWorkspaceFileOrdering(workspaceId: string) {
-		this.lastWorkspaceFileOrderings.delete(workspaceId)
 	}
 
 	tlUser = createTLCurrentUser({
@@ -898,12 +894,6 @@ export class TldrawApp {
 		})
 	}
 
-	/**
-	 * Publish a file or re-publish changes.
-	 *
-	 * @param fileId - The file id to unpublish.
-	 * @returns A result indicating success or failure.
-	 */
 	publishFile(fileId: string) {
 		const file = this.getFile(fileId)
 		if (!file) throw Error(`No file with that id`)
@@ -943,12 +933,6 @@ export class TldrawApp {
 		return assertExists(this.getFile(fileId), 'no file with id ' + fileId)
 	}
 
-	/**
-	 * Unpublish a file.
-	 *
-	 * @param fileId - The file id to unpublish.
-	 * @returns A result indicating success or failure.
-	 */
 	unpublishFile(fileId: string) {
 		const file = this.requireFile(fileId)
 		if (!this.canUpdateFile(fileId)) throw Error('user cannot edit that file')
@@ -1025,31 +1009,12 @@ export class TldrawApp {
 		this.z.mutate.comment.markManyRead({ commentIds, readAt: Date.now() })
 	}
 
-	markCommentUnread(commentId: string) {
-		this.z.mutate.comment.markUnread({ commentId })
-	}
-
 	updateFile(fileId: string, partial: Partial<TlaFile>) {
 		this.z.mutate.file.update({ id: fileId, ...partial })
 	}
 
 	async onFileEnter(fileId: string) {
 		this.z.mutate.onEnterFile({ fileId, time: Date.now() })
-	}
-
-	onFileEdit(fileId: string) {
-		this.updateFileState(fileId, { lastEditAt: Date.now() })
-	}
-
-	onFileSessionStateUpdate(fileId: string, sessionState: TLSessionStateSnapshot) {
-		this.updateFileState(fileId, {
-			lastSessionState: JSON.stringify(sessionState),
-			lastVisitAt: Date.now(),
-		})
-	}
-
-	onFileExit(fileId: string) {
-		this.updateFileState(fileId, { lastVisitAt: Date.now() })
 	}
 
 	static async create(opts: {
