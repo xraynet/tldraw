@@ -50,9 +50,13 @@ export async function submitFeedback(req: IRequest, env: Environment) {
 		}
 	}
 
-	const embedDescription = plainThreadUrl
-		? `${description}\n\nURL: ${url}\nPlain: ${plainThreadUrl}`
-		: `${description}\n\nURL: ${url}`
+	const extraLines = [
+		url ? `URL: ${url}` : null,
+		plainThreadUrl ? `Plain: ${plainThreadUrl}` : null,
+	].filter(Boolean)
+	const embedDescription = extraLines.length
+		? `${description}\n\n${extraLines.join('\n')}`
+		: description
 
 	const payload = {
 		username: `Feedback (${env.WORKER_NAME ?? 'localhost'})`,
@@ -92,12 +96,16 @@ export async function submitFeedback(req: IRequest, env: Environment) {
 
 async function getUserEmail(env: Environment, userId: string) {
 	const pg = createPostgresConnectionPool(env, 'submitFeedback')
-	const { email } = await pg
-		.selectFrom('user')
-		.where('id', '=', userId)
-		.select('email')
-		.executeTakeFirstOrThrow()
-	return email
+	try {
+		const { email } = await pg
+			.selectFrom('user')
+			.where('id', '=', userId)
+			.select('email')
+			.executeTakeFirstOrThrow()
+		return email
+	} finally {
+		await pg.destroy()
+	}
 }
 
 const UPSERT_CUSTOMER_MUTATION = `
@@ -195,7 +203,9 @@ async function createPlainThread(
 				customerIdentifier: { customerId },
 				title: 'tldraw.com feedback',
 				description: description.length > 200 ? description.slice(0, 200) + '…' : description,
-				components: [{ componentText: { text: `${description}\n\nURL: ${url}` } }],
+				components: [
+					{ componentText: { text: url ? `${description}\n\nURL: ${url}` : description } },
+				],
 				...(env.PLAIN_LABEL_TYPE_ID && { labelTypeIds: [env.PLAIN_LABEL_TYPE_ID] }),
 			},
 		},

@@ -1,9 +1,10 @@
 import { useAuth } from '@clerk/clerk-react'
-import { addBreadcrumb, withScope } from '@sentry/react'
+import { addBreadcrumb, captureException } from '@sentry/react'
 import { SubmitFeedbackRequestBody } from '@tldraw/dotcom-shared'
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
 	TldrawUiButton,
+	TldrawUiButtonCheck,
 	TldrawUiButtonLabel,
 	TldrawUiDialogBody,
 	TldrawUiDialogCloseButton,
@@ -23,6 +24,8 @@ import styles from './dialogs.module.css'
 const messages = defineMessages({
 	submitted: { defaultMessage: 'Feedback submitted' },
 	thanks: { defaultMessage: 'Thanks for helping us improve tldraw!' },
+	failed: { defaultMessage: 'Could not submit feedback' },
+	tryAgain: { defaultMessage: 'Please try again.' },
 })
 
 const descriptionKey = 'tldraw-feedback-description'
@@ -74,30 +77,41 @@ function SignedOutSubmitFeedbackDialog() {
 
 function SignedInSubmitFeedbackDialog({ onClose }: { onClose(): void }) {
 	const rInput = useRef<HTMLTextAreaElement>(null)
+	const [includeFileLink, setIncludeFileLink] = useState(true)
 	const toasts = useToasts()
 	const intl = useIntl()
+	const [isSubmitting, setIsSubmitting] = useState(false)
 	const onSubmit = useCallback(async () => {
-		if (!rInput.current?.value?.trim()) return
-		fetch('/api/app/submit-feedback', {
-			method: 'POST',
-			body: JSON.stringify({
-				allowContact: true,
-				description: rInput.current.value.trim(),
-				url: window.location.href.replace('https', 'https-please-be-mindful'),
-			} satisfies SubmitFeedbackRequestBody),
-		})
-			.then((r) => {
-				if (!r.ok) {
-					throw new Error('Failed to submit feedback ' + r.status)
-				}
+		const description = rInput.current?.value?.trim()
+		if (!description || isSubmitting) return
+		setIsSubmitting(true)
+		try {
+			const r = await fetch('/api/app/submit-feedback', {
+				method: 'POST',
+				body: JSON.stringify({
+					allowContact: true,
+					description,
+					url: includeFileLink
+						? window.location.href.replace('https', 'https-please-be-mindful')
+						: '',
+				} satisfies SubmitFeedbackRequestBody),
 			})
-			.catch((e) => {
-				addBreadcrumb({ message: 'Failed to submit feedback' })
-				withScope((scope) => {
-					console.error(e)
-					scope.setExtra('description', rInput.current?.value?.trim())
-				})
+			if (!r.ok) {
+				throw new Error('Failed to submit feedback ' + r.status)
+			}
+		} catch (e) {
+			// Keep the dialog (and the saved draft) so the text isn't lost on a failed send.
+			// Don't attach the draft to the report: it's unsent user text and shouldn't reach Sentry.
+			addBreadcrumb({ message: 'Failed to submit feedback' })
+			captureException(e)
+			toasts.addToast({
+				severity: 'error',
+				title: intl.formatMessage(messages.failed),
+				description: intl.formatMessage(messages.tryAgain),
 			})
+			setIsSubmitting(false)
+			return
+		}
 		deleteFromLocalStorage(descriptionKey)
 		onClose()
 		toasts.addToast({
@@ -105,7 +119,7 @@ function SignedInSubmitFeedbackDialog({ onClose }: { onClose(): void }) {
 			title: intl.formatMessage(messages.submitted),
 			description: intl.formatMessage(messages.thanks),
 		})
-	}, [intl, onClose, toasts])
+	}, [includeFileLink, intl, isSubmitting, onClose, toasts])
 
 	// Focus the input when the dialog opens, select all text
 	useEffect(() => {
@@ -163,12 +177,24 @@ function SignedInSubmitFeedbackDialog({ onClose }: { onClose(): void }) {
 				/>
 			</TldrawUiDialogBody>
 			<TldrawUiDialogFooter className="tlui-dialog__footer__actions">
+				<div className="tlui-dialog__footer__file-link-checkbox">
+					<TldrawUiButton
+						type="normal"
+						onClick={() => setIncludeFileLink((v) => !v)}
+						className={styles.feedbackDialogCheckbox}
+					>
+						<TldrawUiButtonCheck checked={includeFileLink} />
+						<TldrawUiButtonLabel>
+							<F defaultMessage="Include link to current file" />
+						</TldrawUiButtonLabel>
+					</TldrawUiButton>
+				</div>
 				<TldrawUiButton type="normal" onClick={onClose}>
 					<TldrawUiButtonLabel>
 						<F defaultMessage="Cancel" />
 					</TldrawUiButtonLabel>
 				</TldrawUiButton>
-				<TldrawUiButton type="primary" onClick={onSubmit}>
+				<TldrawUiButton type="primary" onClick={onSubmit} disabled={isSubmitting}>
 					<TldrawUiButtonLabel>
 						<F defaultMessage="Submit" />
 					</TldrawUiButtonLabel>

@@ -67,15 +67,12 @@ export const TldrawUi = React.memo(function TldrawUi({
 
 interface TldrawUiContentProps {
 	hideUi?: boolean
-	shareZone?: ReactNode
-	topZone?: ReactNode
 	renderDebugMenuItems?(): React.ReactNode
 }
 
 const TldrawUiInner = React.memo(function TldrawUiInner({
 	children,
 	hideUi,
-	...rest
 }: TldrawUiContentProps & { children: ReactNode }) {
 	// The hideUi prop should prevent the UI from mounting.
 	// If we ever need want the UI to mount and preserve state, then
@@ -89,7 +86,7 @@ const TldrawUiInner = React.memo(function TldrawUiInner({
 	return (
 		<>
 			{children}
-			{hideUi ? null : <TldrawUiContent {...rest} />}
+			{hideUi ? null : <TldrawUiContent />}
 		</>
 	)
 })
@@ -123,12 +120,13 @@ const TldrawUiContent = React.memo(function TldrawUI() {
 		Toasts,
 		Dialogs,
 		A11y,
+		FollowingIndicator,
 	} = useTldrawUiComponents()
 
 	useEditorEvents()
 
 	const rIsEditingAnything = useRef(false)
-	const rHidingTimeout = useRef(-1 as any)
+	const rHidingTimeout = useRef(-1)
 	const [hideToolbarWhileEditing, setHideToolbarWhileEditing] = useState(false)
 
 	useReactor(
@@ -167,16 +165,11 @@ const TldrawUiContent = React.memo(function TldrawUI() {
 	const { 'toggle-focus-mode': toggleFocus } = useActions()
 
 	const { breakpointsAbove, breakpointsBelow } = useMemo(() => {
-		const breakpointsAbove = []
-		const breakpointsBelow = []
-		for (let bp = 0; bp < PORTRAIT_BREAKPOINTS.length; bp++) {
-			if (bp <= breakpoint) {
-				breakpointsAbove.push(bp)
-			} else {
-				breakpointsBelow.push(bp)
-			}
+		const all = PORTRAIT_BREAKPOINTS.map((_, bp) => bp)
+		return {
+			breakpointsAbove: all.slice(0, breakpoint + 1).join(' '),
+			breakpointsBelow: all.slice(breakpoint + 1).join(' '),
 		}
-		return { breakpointsAbove, breakpointsBelow }
 	}, [breakpoint])
 
 	return (
@@ -184,12 +177,18 @@ const TldrawUiContent = React.memo(function TldrawUI() {
 			className={classNames('tlui-layout', {
 				'tlui-layout__mobile': breakpoint < PORTRAIT_BREAKPOINT.TABLET_SM,
 			})}
+			// The outer editor container has role="application" so that desktop screen readers treat
+			// the canvas as an interactive surface. Mark the UI layer as role="document" so that the
+			// toolbar, menus, and dialogs stay navigable to assistive tech — especially mobile screen
+			// readers like VoiceOver and TalkBack that do not announce role="application". See
+			// https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Roles/application_role
+			role="document"
 			// When the virtual keyboard is opening we want it to hide immediately.
 			// But when the virtual keyboard is closing we want to wait a bit before showing it again.
 			data-iseditinganything={hideToolbarWhileEditing}
 			data-breakpoint={breakpoint}
-			data-breakpoints-above={breakpointsAbove.join(' ')}
-			data-breakpoints-below={breakpointsBelow.join(' ')}
+			data-breakpoints-above={breakpointsAbove}
+			data-breakpoints-below={breakpointsBelow}
 		>
 			<SkipToMainContent />
 			{isFocusMode ? (
@@ -229,6 +228,7 @@ const TldrawUiContent = React.memo(function TldrawUI() {
 					</div>
 				</>
 			)}
+			{FollowingIndicator && <FollowingIndicator />}
 			{Toasts && <Toasts />}
 			{Dialogs && <Dialogs />}
 		</div>
@@ -237,15 +237,13 @@ const TldrawUiContent = React.memo(function TldrawUI() {
 
 /** @public @react */
 export function TldrawUiInFrontOfTheCanvas() {
-	const { RichTextToolbar, ImageToolbar, VideoToolbar, CursorChatBubble, FollowingIndicator } =
-		useTldrawUiComponents()
+	const { RichTextToolbar, ImageToolbar, VideoToolbar, CursorChatBubble } = useTldrawUiComponents()
 
 	return (
 		<>
 			{RichTextToolbar && <RichTextToolbar />}
 			{ImageToolbar && <ImageToolbar />}
 			{VideoToolbar && <VideoToolbar />}
-			{FollowingIndicator && <FollowingIndicator />}
 			{CursorChatBubble && <CursorChatBubble />}
 		</>
 	)

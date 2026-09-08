@@ -1,5 +1,5 @@
 import { captureException } from '@sentry/react'
-import { ROOM_PREFIX } from '@tldraw/dotcom-shared'
+import { ROOM_PREFIX, type HistoryResponseBody } from '@tldraw/dotcom-shared'
 import { useEffect } from 'react'
 import { useRouteError } from 'react-router-dom'
 import { fetch } from 'tldraw'
@@ -16,7 +16,7 @@ History here should work in an identical way to its previous implementation.
 
 // todo: Add top bar for anon users (branding, sign in, etc)
 
-const { loader, useData } = defineLoader(async (args) => {
+const { loader, useMaybeData } = defineLoader(async (args) => {
 	const boardId = args.params.boardId
 
 	if (!boardId) return null
@@ -27,7 +27,7 @@ const { loader, useData } = defineLoader(async (args) => {
 	if (!result.ok) return null
 	const data = await result.json()
 
-	return { data, boardId } as { data: string[]; boardId: string }
+	return { data, boardId } as { data: HistoryResponseBody; boardId: string }
 })
 
 export { loader }
@@ -41,7 +41,7 @@ export function ErrorBoundary() {
 }
 
 export function Component({ error: _error }: { error?: unknown }) {
-	const data = useData()
+	const data = useMaybeData()
 
 	const userId = useMaybeApp()?.userId
 
@@ -63,7 +63,10 @@ export function Component({ error: _error }: { error?: unknown }) {
 			) : (
 				<TlaAnonLayout>
 					<BoardHistoryLog
-						data={data.data.map((timestamp) => ({ timestamp, href: `./${timestamp}` }))}
+						data={data.data.timestamps.map((timestamp) => ({
+							timestamp,
+							href: `./${timestamp}`,
+						}))}
 					/>
 				</TlaAnonLayout>
 			)}

@@ -10,7 +10,6 @@ import {
 	VecModel,
 	WeakCache,
 	createShapeId,
-	toDomPrecision,
 	useEditor,
 	useEditorComponents,
 	useIsEditing,
@@ -104,14 +103,6 @@ export class VideoShapeUtil extends BaseBoxShapeUtil<TLVideoShape> {
 		return <VideoShape shape={shape} />
 	}
 
-	indicator(shape: TLVideoShape) {
-		return <rect width={toDomPrecision(shape.props.w)} height={toDomPrecision(shape.props.h)} />
-	}
-
-	override useLegacyIndicator() {
-		return false
-	}
-
 	override getIndicatorPath(shape: TLVideoShape): Path2D {
 		const path = new Path2D()
 		path.rect(0, 0, shape.props.w, shape.props.h)
@@ -184,14 +175,16 @@ const VideoShape = memo(function VideoShape({ shape }: { shape: TLVideoShape }) 
 		}
 	}, [isEditing, isLoaded])
 
+	const hasVideo = !!asset?.props.src && !!url && isLoaded
+
 	return (
 		<>
 			<HTMLContainer
 				id={shape.id}
 				style={{
 					color: 'var(--tl-color-text-3)',
-					backgroundColor: asset ? 'transparent' : 'var(--tl-color-low)',
-					border: asset ? 'none' : '1px solid var(--tl-color-low-border)',
+					backgroundColor: hasVideo ? 'transparent' : 'var(--tl-color-low)',
+					border: hasVideo ? 'none' : '1px solid var(--tl-color-low-border)',
 				}}
 			>
 				<div className="tl-counter-scaled">

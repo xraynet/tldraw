@@ -93,8 +93,13 @@ export class ClientWebSocketAdapter implements TLPersistentClientSocket<
 	close() {
 		this.isDisposed = true
 		this._reconnectManager.close()
+		// orphan the socket before closing it (as _closeSocket does) so its onclose can't run
+		// _handleDisconnect after disposal — that would notify listeners and schedule a reconnect
+		const ws = this._ws
+		this._ws = null
 		//  WebSocket.close() is idempotent
-		this._ws?.close()
+		ws?.close()
+		this._connectionStatus.set('offline')
 	}
 
 	/**
@@ -212,7 +217,19 @@ export class ClientWebSocketAdapter implements TLPersistentClientSocket<
 				this._ws === ws,
 				"sockets must only be orphaned when they are CLOSING or CLOSED, so they can't receive messages"
 			)
-			const parsed = JSON.parse(ev.data.toString())
+			let parsed: TLSocketServerSentEvent<TLRecord>
+			try {
+				parsed = JSON.parse(ev.data.toString())
+			} catch {
+				// A malformed message means the connection delivered corrupt data, so we can't trust
+				// that we're still in sync. Dropping the message can silently desync the client (e.g. a
+				// missed 'patch' is applied as if it never happened), so instead we restart the
+				// connection. Reconnecting re-hydrates the store from the last known server clock and
+				// brings us fully back in sync.
+				warnOnce('Received malformed WebSocket message. Restarting the connection.')
+				this.restart()
+				return
+			}
 			this.messageListeners.forEach((cb) => cb(parsed))
 		}
 
@@ -227,8 +244,6 @@ export class ClientWebSocketAdapter implements TLPersistentClientSocket<
 		this._ws = null
 		this._handleDisconnect('manual')
 	}
-
-	// TLPersistentClientSocket stuff
 
 	_connectionStatus: Atom<TLPersistentClientSocketStatus | 'initial'> = atom(
 		'websocket connection status',
@@ -501,21 +516,33 @@ export class ReconnectManager {
 		}
 	}
 
-	private scheduleAttempt() {
+	private async scheduleAttempt() {
 		assert(this.state === 'pendingAttempt')
+		if (this.isDisposed) return
 		debug('scheduling a connection attempt')
-		Promise.resolve(this.getUri()).then((uri) => {
-			// this can happen if the promise gets resolved too late
-			if (this.state !== 'pendingAttempt' || this.isDisposed) return
-			assert(
-				this.socketAdapter._ws?.readyState !== WebSocket.OPEN,
-				'There should be no connection attempts while already connected'
-			)
 
-			this.lastAttemptStart = Date.now()
-			this.socketAdapter._setNewSocket(new WebSocket(httpToWs(uri)))
-			this.state = 'pendingAttemptResult'
-		})
+		let uri: string
+		try {
+			uri = await this.getUri()
+		} catch (error) {
+			// A failed auth-token fetch must retry instead of leaving us with no socket or timer.
+			if (this.state !== 'pendingAttempt' || this.isDisposed) return
+			console.error('Failed to get the websocket URI, retrying', error)
+			this.state = 'delay'
+			this.reconnectTimeout = setTimeout(() => this.disconnected(), this.intendedDelay)
+			return
+		}
+
+		// this can happen if the promise gets resolved too late
+		if (this.state !== 'pendingAttempt' || this.isDisposed) return
+		assert(
+			this.socketAdapter._ws?.readyState !== WebSocket.OPEN,
+			'There should be no connection attempts while already connected'
+		)
+
+		this.lastAttemptStart = Date.now()
+		this.socketAdapter._setNewSocket(new WebSocket(httpToWs(uri)))
+		this.state = 'pendingAttemptResult'
 	}
 
 	private getMaxDelay() {
@@ -629,6 +656,7 @@ export class ReconnectManager {
 		debug('ReconnectManager.disconnected')
 		// This either means we're freshly disconnected, or the last connection attempt failed;
 		// either way, time to try again.
+		if (this.isDisposed) return
 
 		// Guard against delayed notifications and recheck synchronously
 		if (

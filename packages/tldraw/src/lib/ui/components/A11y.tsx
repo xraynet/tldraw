@@ -13,6 +13,7 @@ import {
 import { memo, MouseEvent, useCallback, useEffect, useRef } from 'react'
 import { useA11y } from '../context/a11y'
 import { useTranslation } from '../hooks/useTranslation/useTranslation'
+import { suppressBackToContent } from './HelperButtons/BackToContent'
 import { TldrawUiButton } from './primitives/Button/TldrawUiButton'
 
 export function SkipToMainContent() {
@@ -27,6 +28,7 @@ export function SkipToMainContent() {
 			const shapes = editor.getCurrentPageShapesInReadingOrder()
 			if (!shapes.length) return
 			editor.setSelectedShapes([shapes[0].id])
+			suppressBackToContent(editor, editor.options.animationMediumMs)
 			editor.zoomToSelectionIfOffscreen(256, {
 				animation: {
 					duration: editor.options.animationMediumMs,
@@ -92,49 +94,43 @@ export function generateShapeAnnouncementMessage(args: {
 	msg(id: string, values?: Record<string, any>): string
 }) {
 	const { editor, selectedShapeIds, msg } = args
-	let a11yLive = ''
 	const numShapes = selectedShapeIds.length
 
 	if (numShapes > 1) {
-		a11yLive = msg('a11y.multiple-shapes').replace('{num}', numShapes.toString())
-	} else if (numShapes === 1) {
-		const shapeId = selectedShapeIds[0]
-		const shape = editor.getShape(shapeId)
-		if (!shape) return ''
-
-		const shapeUtil = editor.getShapeUtil(shape.type)
-
-		const isMedia = ['image', 'video'].includes(shape.type)
-		// Yeah, yeah this is a bit of a hack, we should get better translations.
-		let shapeType = ''
-		if (shape.type === 'geo') {
-			shapeType = msg(`geo-style.${(shape as TLGeoShape).props.geo}`)
-		} else if (isMedia) {
-			shapeType = msg(`a11y.shape-${shape.type}`)
-		} else {
-			shapeType = msg(`tool.${shape.type}`)
-		}
-
-		// Get shape index in reading order
-		const readingOrderShapes = editor.getCurrentPageShapesInReadingOrder()
-		const currentShapeIndex = (readingOrderShapes.findIndex((s) => s.id === shapeId) + 1).toString()
-		const totalShapes = readingOrderShapes.length.toString()
-		const shapeIndex = msg('a11y.shape-index')
-			.replace('{num}', currentShapeIndex)
-			.replace('{total}', totalShapes)
-
-		// Get describing text (alt text or shape text)
-		const describingText = shapeUtil.getAriaDescriptor(shape) || shapeUtil.getText(shape) || ''
-
-		// Build the full announcement
-		a11yLive = (describingText ? `${describingText}, ` : '') + `${shapeType}. ${shapeIndex}`
+		return msg('a11y.multiple-shapes').replace('{num}', numShapes.toString())
 	}
+	if (numShapes !== 1) return ''
 
-	return a11yLive
+	const shapeId = selectedShapeIds[0]
+	const shape = editor.getShape(shapeId)
+	if (!shape) return ''
+
+	const shapeUtil = editor.getShapeUtil(shape.type)
+
+	// Yeah, yeah this is a bit of a hack, we should get better translations.
+	const shapeType =
+		shape.type === 'geo'
+			? msg(`geo-style.${(shape as TLGeoShape).props.geo}`)
+			: shape.type === 'image' || shape.type === 'video'
+				? msg(`a11y.shape-${shape.type}`)
+				: msg(`tool.${shape.type}`)
+
+	// Get shape index in reading order
+	const readingOrderShapes = editor.getCurrentPageShapesInReadingOrder()
+	const currentShapeIndex = (readingOrderShapes.findIndex((s) => s.id === shapeId) + 1).toString()
+	const shapeIndex = msg('a11y.shape-index')
+		.replace('{num}', currentShapeIndex)
+		.replace('{total}', readingOrderShapes.length.toString())
+
+	// Get describing text (alt text or shape text)
+	const describingText = shapeUtil.getAriaDescriptor(shape) || shapeUtil.getText(shape) || ''
+
+	// Build the full announcement
+	return (describingText ? `${describingText}, ` : '') + `${shapeType}. ${shapeIndex}`
 }
 
 /** @public */
-export const useSelectedShapesAnnouncer = () => {
+export function useSelectedShapesAnnouncer() {
 	const editor = useMaybeEditor()
 	const a11y = useA11y()
 	const msg = useTranslation()

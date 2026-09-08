@@ -47,6 +47,11 @@ export interface TLUiPopoverContentProps {
 	align?: 'start' | 'center' | 'end'
 	alignOffset?: number
 	sideOffset?: number
+	/**
+	 * Minimum distance to keep between the popover and the viewport edge before it
+	 * shifts to stay in view. Defaults to Radix's `0`.
+	 */
+	collisionPadding?: number
 	disableEscapeKeyDown?: boolean
 	autoFocusFirstButton?: boolean
 }
@@ -58,6 +63,7 @@ export function TldrawUiPopoverContent({
 	align = 'center',
 	sideOffset = 8,
 	alignOffset = 0,
+	collisionPadding,
 	disableEscapeKeyDown = false,
 	autoFocusFirstButton = true,
 }: TLUiPopoverContentProps) {
@@ -68,11 +74,10 @@ export function TldrawUiPopoverContent({
 	const handleOpenAutoFocus = React.useCallback(() => {
 		if (!autoFocusFirstButton) return
 		const buttons = (ref.current?.querySelectorAll('button:not([disabled])') ?? []) as HTMLElement[]
-		const visibleButtons = [...buttons].filter(
+		const firstVisibleButton = [...buttons].find(
 			(button) => button.offsetWidth || button.offsetHeight
 		)
-		const firstButton = visibleButtons[0]
-		if (firstButton) firstButton.focus()
+		firstVisibleButton?.focus()
 	}, [autoFocusFirstButton])
 
 	return (
@@ -83,6 +88,7 @@ export function TldrawUiPopoverContent({
 				sideOffset={sideOffset}
 				align={align}
 				alignOffset={alignOffset}
+				collisionPadding={collisionPadding}
 				dir={dir}
 				ref={ref}
 				onOpenAutoFocus={handleOpenAutoFocus}

@@ -4,17 +4,16 @@ import { IRequest } from 'itty-router'
 import { getR2KeyForRoom } from '../r2'
 import { Environment } from '../types'
 import { isRoomIdTooLong, roomIdIsTooLong } from '../utils/roomIdIsTooLong'
-import { requireWriteAccessToFile } from '../utils/tla/getAuth'
+import { requireAdminAccessToRequest } from '../utils/tla/getAuth'
 import { isTestFile } from '../utils/tla/isTestFile'
 
-function getMonthPrefix(date: Date): string {
+export function getMonthPrefix(date: Date): string {
 	return date.toISOString().split('T')[0].substring(0, 7)
 }
 
-function getPreviousMonth(date: Date): Date {
-	const prev = new Date(date)
-	prev.setMonth(prev.getMonth() - 1)
-	return prev
+export function getPreviousMonth(date: Date): Date {
+	// Use day 1 to avoid overflowing shorter months and scanning the same month twice.
+	return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() - 1, 1))
 }
 
 async function fetchTimestampsFromBatch(
@@ -78,15 +77,13 @@ export async function getRoomHistory(
 	if (!roomId) return notFound()
 	if (isRoomIdTooLong(roomId)) return roomIdIsTooLong()
 
-	if (isApp) {
-		await requireWriteAccessToFile(request, env, roomId)
-	}
+	await requireAdminAccessToRequest(request, env)
 
 	if (isTestFile(roomId)) {
 		return new Response('Not found', { status: 404 })
 	}
 
-	const offset = request.query?.offset as string // offset is the earliest timestamp from the previous page
+	let offset = request.query?.offset as string // offset is the earliest timestamp from the previous page
 
 	const versionCacheBucket = env.ROOMS_HISTORY_EPHEMERAL
 	const bucketKey = getR2KeyForRoom({ slug: roomId, isApp })
@@ -99,11 +96,10 @@ export async function getRoomHistory(
 	const targetEntryCount = 1000
 
 	if (offset) {
-		try {
-			currentMonth = new Date(offset)
-		} catch (_e) {
-			currentMonth = new Date()
-		}
+		// Invalid dates would throw in toISOString when building the month prefix.
+		const parsed = new Date(offset)
+		currentMonth = Number.isNaN(parsed.getTime()) ? new Date() : parsed
+		offset = currentMonth.toISOString()
 	} else {
 		// If we don't have an offset we can check if the room doesn't have too many entries
 		const allTimestampsForRoom = await fetchTimestampsForPrefix(

@@ -11,6 +11,7 @@ export interface TLUiIconProps extends React.HTMLAttributes<HTMLDivElement> {
 	icon: TLUiIconType | Exclude<string, TLUiIconType> | TLUiIconJsx
 	label: string
 	small?: boolean
+	tiny?: boolean
 	color?: string
 	children?: undefined
 	invertIcon?: boolean
@@ -23,6 +24,7 @@ export const TldrawUiIcon = memo(function TldrawUiIcon({
 	small,
 	invertIcon,
 	icon,
+	tiny,
 	color,
 	className,
 	...props
@@ -32,6 +34,7 @@ export const TldrawUiIcon = memo(function TldrawUiIcon({
 			<TldrawUIIconInner
 				label={label}
 				small={small}
+				tiny={tiny}
 				invertIcon={invertIcon}
 				icon={icon}
 				color={color}
@@ -43,7 +46,11 @@ export const TldrawUiIcon = memo(function TldrawUiIcon({
 
 	return cloneElement(icon, {
 		...props,
-		className: classNames({ 'tlui-icon__small': small }, className, icon.props.className),
+		className: classNames(
+			{ 'tlui-icon__small': small, 'tlui-icon__tiny': tiny },
+			className,
+			icon.props.className
+		),
 		'aria-label': label,
 		style: {
 			color,
@@ -56,6 +63,7 @@ export const TldrawUiIcon = memo(function TldrawUiIcon({
 function TldrawUIIconInner({
 	label,
 	small,
+	tiny,
 	invertIcon,
 	icon,
 	color,
@@ -71,7 +79,7 @@ function TldrawUIIconInner({
 			console.error(`Icon not found: ${icon}. Add it to the assetUrls.icons object.`)
 		}
 
-		if (ref?.current) {
+		if (ref.current) {
 			// HACK: Fix for <https://linear.app/tldraw/issue/TLD-1700/dragging-around-with-the-handtool-makes-lots-of-requests-for-icons>
 			// It seems that passing `WebkitMask` to react will cause a render on each call, no idea why... but this appears to be the fix.
 			// @ts-ignore
@@ -85,7 +93,7 @@ function TldrawUIIconInner({
 			<div
 				className={classNames(
 					'tlui-icon tlui-icon__placeholder',
-					{ 'tlui-icon__small': small },
+					{ 'tlui-icon__small': small, 'tlui-icon__tiny': tiny },
 					className
 				)}
 				{...props}
@@ -99,7 +107,11 @@ function TldrawUIIconInner({
 			ref={ref}
 			aria-label={label}
 			role="img"
-			className={classNames('tlui-icon', { 'tlui-icon__small': small }, className)}
+			className={classNames(
+				'tlui-icon',
+				{ 'tlui-icon__small': small, 'tlui-icon__tiny': tiny },
+				className
+			)}
 			style={{
 				color,
 				mask: `url(${asset}) center 100% / 100% no-repeat`,

@@ -25,11 +25,18 @@ export function MobileStylePanel() {
 	const { orientation } = useTldrawUiOrientation()
 	const relevantStyles = useRelevantStyles()
 	const color = relevantStyles?.get(DefaultColorStyle)
-	const colors = editor.getCurrentTheme().colors[editor.getColorMode()]
-	const currentColor =
-		color?.type === 'shared'
-			? getColorValue(colors, color.value as TLDefaultColorStyle, 'solid')
-			: getColorValue(colors, 'black', 'solid')
+	const currentColor = useValue(
+		'mobile style panel current color',
+		() => {
+			const colors = editor.getCurrentTheme().colors[editor.getColorMode()]
+			return getColorValue(
+				colors,
+				color?.type === 'shared' ? (color.value as TLDefaultColorStyle) : 'black',
+				'solid'
+			)
+		},
+		[editor, color]
+	)
 
 	const disableStylePanel = useValue(
 		'disable style panel',
@@ -62,12 +69,12 @@ export function MobileStylePanel() {
 					disabled={disableStylePanel}
 				>
 					<TldrawUiButtonIcon
-						icon={disableStylePanel ? 'blob' : color?.type === 'mixed' ? 'mixed' : 'blob'}
+						icon={!disableStylePanel && color?.type === 'mixed' ? 'mixed' : 'blob'}
 					/>
 				</TldrawUiButton>
 			</TldrawUiPopoverTrigger>
 			<TldrawUiPopoverContent side={orientation === 'horizontal' ? 'top' : 'right'} align="end">
-				{StylePanel && <StylePanel isMobile />}
+				<StylePanel isMobile />
 			</TldrawUiPopoverContent>
 		</TldrawUiPopover>
 	)

@@ -1,5 +1,5 @@
-import { TLPageId, useEditor, useValue } from '@tldraw/editor'
-import { supportsDownloadingOriginal } from '../context/actions'
+import { useEditor, useValue } from '@tldraw/editor'
+import { supportsDownloadingOriginal, useActions } from '../context/actions'
 import { useUiEvents } from '../context/events'
 import { useToasts } from '../context/toasts'
 import {
@@ -55,13 +55,9 @@ export function FlattenMenuItem() {
 	const shouldDisplay = useValue(
 		'should display flatten option',
 		() => {
-			const selectedShapeIds = editor.getSelectedShapeIds()
-			if (selectedShapeIds.length === 0) return false
+			if (editor.getSelectedShapeIds().length === 0) return false
 			const onlySelectedShape = editor.getOnlySelectedShape()
-			if (onlySelectedShape && editor.isShapeOfType(onlySelectedShape, 'image')) {
-				return false
-			}
-			return true
+			return !(onlySelectedShape && editor.isShapeOfType(onlySelectedShape, 'image'))
 		},
 		[editor]
 	)
@@ -75,11 +71,7 @@ export function DownloadOriginalMenuItem() {
 	const editor = useEditor()
 	const shouldDisplay = useValue(
 		'should display download original option',
-		() => {
-			const selectedShapes = editor.getSelectedShapes()
-			if (selectedShapes.length === 0) return false
-			return selectedShapes.some((shape) => supportsDownloadingOriginal(shape, editor))
-		},
+		() => editor.getSelectedShapes().some((shape) => supportsDownloadingOriginal(shape, editor)),
 		[editor]
 	)
 	if (!shouldDisplay) return null
@@ -104,6 +96,14 @@ export function UngroupMenuItem() {
 }
 
 /** @public @react */
+export function FrameSelectionMenuItem() {
+	const shouldDisplay = useAllowGroup()
+	if (!shouldDisplay) return null
+
+	return <TldrawUiMenuActionItem actionId="frame-selection" />
+}
+
+/** @public @react */
 export function RemoveFrameMenuItem() {
 	const editor = useEditor()
 	const shouldDisplay = useValue(
@@ -111,7 +111,7 @@ export function RemoveFrameMenuItem() {
 		() => {
 			const selectedShapes = editor.getSelectedShapes()
 			if (selectedShapes.length === 0) return false
-			return selectedShapes.every((shape) => editor.isShapeOfType(shape, 'frame'))
+			return selectedShapes.every((shape) => editor.isShapeFrameLike(shape))
 		},
 		[editor]
 	)
@@ -129,7 +129,7 @@ export function FitFrameToContentMenuItem() {
 			const onlySelectedShape = editor.getOnlySelectedShape()
 			if (!onlySelectedShape) return false
 			return (
-				editor.isShapeOfType(onlySelectedShape, 'frame') &&
+				editor.isShapeFrameLike(onlySelectedShape) &&
 				editor.getSortedChildIdsForParent(onlySelectedShape).length > 0
 			)
 		},
@@ -231,8 +231,12 @@ export function ClipboardMenuGroup() {
 /** @public @react */
 export function CopyAsMenuGroup() {
 	const editor = useEditor()
+	const actions = useActions()
 	const atLeastOneShapeOnPage = useHasShapesOnPage()
 	const isDebugMode = useValue('isDebugMode', () => editor.getInstanceState().isDebugMode, [editor])
+
+	const showCopyAsJson = !!actions['copy-as-json'] && isDebugMode
+	if (!actions['copy-as-svg'] && !actions['copy-as-png'] && !showCopyAsJson) return null
 
 	return (
 		<TldrawUiMenuSubmenu
@@ -246,9 +250,29 @@ export function CopyAsMenuGroup() {
 				{Boolean(editor.getContainerWindow().navigator.clipboard?.write) && (
 					<TldrawUiMenuActionItem actionId="copy-as-png" />
 				)}
-				{isDebugMode && <TldrawUiMenuActionItem actionId="copy-as-json" />}
+				{showCopyAsJson && <TldrawUiMenuActionItem actionId="copy-as-json" />}
 			</TldrawUiMenuGroup>
 			<TldrawUiMenuGroup id="copy-as-bg">
+				<ToggleTransparentBgMenuItem />
+			</TldrawUiMenuGroup>
+		</TldrawUiMenuSubmenu>
+	)
+}
+
+/** @public @react */
+export function ExportAsMenuGroup() {
+	const actions = useActions()
+
+	// If a consumer has removed the export actions via `overrides`, don't render an empty submenu.
+	if (!actions['export-as-svg'] && !actions['export-as-png']) return null
+
+	return (
+		<TldrawUiMenuSubmenu id="export-as" label="context-menu.export-as" size="small">
+			<TldrawUiMenuGroup id="export-as-group">
+				<TldrawUiMenuActionItem actionId="export-as-svg" />
+				<TldrawUiMenuActionItem actionId="export-as-png" />
+			</TldrawUiMenuGroup>
+			<TldrawUiMenuGroup id="export-as-bg">
 				<ToggleTransparentBgMenuItem />
 			</TldrawUiMenuGroup>
 		</TldrawUiMenuSubmenu>
@@ -277,9 +301,7 @@ export function CopyMenuItem() {
 
 /** @public @react */
 export function PasteMenuItem() {
-	const shouldDisplay = showMenuPaste
-
-	return <TldrawUiMenuActionItem actionId="paste" disabled={!shouldDisplay} />
+	return <TldrawUiMenuActionItem actionId="paste" disabled={!showMenuPaste} />
 }
 
 /* ------------------- Conversions ------------------ */
@@ -293,15 +315,7 @@ export function ConversionsMenuGroup() {
 	return (
 		<TldrawUiMenuGroup id="conversions">
 			<CopyAsMenuGroup />
-			<TldrawUiMenuSubmenu id="export-as" label="context-menu.export-as" size="small">
-				<TldrawUiMenuGroup id="export-as-group">
-					<TldrawUiMenuActionItem actionId="export-as-svg" />
-					<TldrawUiMenuActionItem actionId="export-as-png" />
-				</TldrawUiMenuGroup>
-				<TldrawUiMenuGroup id="export-as-bg">
-					<ToggleTransparentBgMenuItem />
-				</TldrawUiMenuGroup>
-			</TldrawUiMenuSubmenu>
+			<ExportAsMenuGroup />
 			<DownloadOriginalMenuItem />
 		</TldrawUiMenuGroup>
 	)
@@ -343,6 +357,7 @@ export function EditMenuSubmenu() {
 			<GroupMenuItem />
 			<UngroupMenuItem />
 			<FlattenMenuItem />
+			<FrameSelectionMenuItem />
 			<EditLinkMenuItem />
 			<FitFrameToContentMenuItem />
 			<RemoveFrameMenuItem />
@@ -462,7 +477,7 @@ export function MoveToPageMenu() {
 						label={page.name.length > 30 ? `${page.name.slice(0, 30)}…` : page.name}
 						onSelect={() => {
 							editor.markHistoryStoppingPoint('move_shapes_to_page')
-							editor.moveShapesToPage(editor.getSelectedShapeIds(), page.id as TLPageId)
+							editor.moveShapesToPage(editor.getSelectedShapeIds(), page.id)
 
 							const toPage = editor.getPage(page.id)
 
